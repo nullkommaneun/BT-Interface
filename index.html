@@ -2,281 +2,318 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hardcore BLE Scanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BLE Lab V2</title>
     <style>
-        :root { --bg: #121212; --surface: #1e1e1e; --primary: #bb86fc; --text: #e0e0e0; --success: #03dac6; --error: #cf6679; }
-        body { font-family: 'Courier New', monospace; background: var(--bg); color: var(--text); margin: 0; padding: 0; padding-bottom: 200px; }
-        header { background: var(--surface); padding: 15px; border-bottom: 1px solid #333; position: sticky; top: 0; z-index: 100; }
-        h1 { font-size: 1.2rem; margin: 0; }
-        button { background: var(--primary); color: #000; border: none; padding: 10px 15px; font-weight: bold; cursor: pointer; margin-right: 5px; }
-        button:disabled { opacity: 0.5; }
+        :root { --bg: #0d0d0d; --surface: #1a1a1a; --primary: #00ff9d; --text: #cccccc; --accent: #ff0055; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Consolas', 'Monaco', monospace; background: var(--bg); color: var(--text); margin: 0; padding-bottom: 350px; font-size: 14px; }
         
-        .device-info { padding: 15px; border-bottom: 1px solid #333; }
-        .service-block { margin: 10px; padding: 10px; background: var(--surface); border: 1px solid #333; }
-        .service-uuid { color: var(--success); font-weight: bold; font-size: 0.9rem; }
+        /* Header & Top Controls */
+        header { background: var(--surface); padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        button { background: #333; color: var(--primary); border: 1px solid var(--primary); padding: 8px 12px; font-family: inherit; font-weight: bold; text-transform: uppercase; }
+        button:active { background: var(--primary); color: #000; }
+        button:disabled { border-color: #555; color: #555; }
         
-        .char-block { margin-top: 10px; padding-left: 10px; border-left: 2px solid var(--primary); }
-        .char-uuid { font-size: 0.8rem; color: #aaa; margin-bottom: 5px; display: block; }
-        .char-props { font-size: 0.7rem; color: #666; margin-bottom: 5px; }
-        
-        .actions { display: flex; gap: 5px; margin-bottom: 5px; }
-        .actions button { font-size: 0.7rem; padding: 5px 10px; background: #333; color: #fff; border: 1px solid #555; }
-        
-        .value-display { font-size: 0.8rem; color: var(--success); word-break: break-all; background: #000; padding: 5px; margin-top: 5px; display: none; }
+        /* Layout */
+        .container { padding: 10px; }
+        .panel { background: var(--surface); border: 1px solid #333; margin-bottom: 15px; padding: 10px; }
+        .panel-title { color: var(--primary); font-size: 0.9rem; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 5px; display: flex; justify-content: space-between; }
 
-        /* Der On-Screen Debugger */
-        #debugger {
+        /* Live Plotter */
+        canvas { width: 100%; height: 100px; background: #000; border: 1px solid #333; display: block; }
+
+        /* Parser Editor */
+        textarea { width: 100%; height: 80px; background: #111; color: #fff; border: 1px solid #444; font-family: monospace; font-size: 12px; padding: 5px; }
+        .help-text { font-size: 0.7rem; color: #777; margin-top: 4px; }
+
+        /* Service/Char List */
+        .service-uuid { color: #fff; font-weight: bold; margin-top: 10px; }
+        .char-item { margin-left: 10px; border-left: 2px solid #444; padding-left: 10px; margin-top: 5px; padding-bottom: 5px; }
+        .char-uuid { font-size: 0.8rem; color: #aaa; }
+        .val-display { color: var(--primary); font-weight: bold; word-break: break-all; }
+        
+        .btn-group { display: flex; gap: 5px; margin-top: 5px; }
+        .btn-sm { font-size: 0.7rem; padding: 4px 8px; }
+
+        /* Debugger / Terminal */
+        #terminal {
             position: fixed; bottom: 0; left: 0; right: 0; height: 30vh;
             background: rgba(0,0,0,0.95); border-top: 2px solid var(--primary);
-            overflow-y: auto; padding: 10px; font-size: 0.75rem;
-            box-shadow: 0 -4px 10px rgba(0,0,0,0.5);
+            overflow-y: auto; padding: 5px; font-size: 0.75rem; z-index: 200;
         }
-        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #222; }
-        .log-time { color: #666; margin-right: 5px; }
-        .log-info { color: var(--text); }
-        .log-warn { color: var(--primary); }
-        .log-error { color: var(--error); }
-        .log-data { color: var(--success); }
+        .log-line { margin-bottom: 2px; border-bottom: 1px solid #222; display: flex; }
+        .ts { color: #555; min-width: 60px; margin-right: 5px; }
+        .l-info { color: #ddd; }
+        .l-warn { color: #ffaa00; }
+        .l-err { color: var(--accent); }
+        .l-in { color: var(--primary); }
+        .l-out { color: #00aaff; }
     </style>
 </head>
 <body>
 
 <header>
-    <button id="btnScan">SCAN & CONNECT</button>
-    <button id="btnDisconnect" disabled>DISCONNECT</button>
+    <div>
+        <button id="btnScan">Scan</button>
+        <button id="btnDisc" disabled>X</button>
+    </div>
+    <div id="status" style="align-self: center; font-size: 0.8rem;">Ready</div>
 </header>
 
-<div id="app-content">
-    <div class="device-info" id="deviceInfo">Kein Gerät verbunden.</div>
-    <div id="servicesContainer"></div>
+<div class="container">
+
+    <div class="panel">
+        <div class="panel-title">
+            <span>LABORATORY (Parser & Plot)</span>
+            <button class="btn-sm" id="btnClearPlot">Clear</button>
+        </div>
+        <canvas id="scope"></canvas>
+        <div style="margin-top:10px;">
+            <label style="font-size:0.75rem; color:#888;">PARSER (JS): (data: DataView) => number|string</label>
+            <textarea id="parserCode">
+// Default: Return 1st byte as int
+if (data.byteLength > 0) return data.getUint8(0);
+return 0;
+            </textarea>
+            <div class="help-text">Schreibe JS. Return-Wert wird geplottet & geloggt. Var `data` ist DataView.</div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">SERVICES & I/O</div>
+        <div id="serviceList">Waiting for connection...</div>
+    </div>
+
 </div>
 
-<div id="debugger">
-    <div class="log-entry"><span class="log-time">--:--:--</span> <span class="log-info">System bereit. Warte auf Input...</span></div>
-</div>
+<div id="terminal"></div>
 
 <script>
-    // --- Konfiguration & Globals ---
-    let currentDevice = null;
-    let currentServer = null;
-    
+    // --- SYSTEM ---
     const ui = {
-        btnScan: document.getElementById('btnScan'),
-        btnDisconnect: document.getElementById('btnDisconnect'),
-        deviceInfo: document.getElementById('deviceInfo'),
-        servicesContainer: document.getElementById('servicesContainer'),
-        debugger: document.getElementById('debugger')
+        status: document.getElementById('status'),
+        list: document.getElementById('serviceList'),
+        term: document.getElementById('terminal'),
+        scan: document.getElementById('btnScan'),
+        disc: document.getElementById('btnDisc'),
+        canvas: document.getElementById('scope'),
+        parser: document.getElementById('parserCode')
     };
 
-    // --- Logger System (Ersetzt console.log für Mobile) ---
+    let device = null;
+    let server = null;
+    let plotData = new Array(300).fill(0); // Buffer für Graph
+    let activeCharForPlot = null; // Welche Char füttert den Graphen?
+
+    // --- LOGGER ---
     function log(msg, type = 'info') {
         const now = new Date();
-        const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}.${now.getMilliseconds().toString().padStart(3,'0')}`;
-        
-        const entry = document.createElement('div');
-        entry.className = 'log-entry';
-        entry.innerHTML = `<span class="log-time">${timeStr}</span> <span class="log-${type}">${msg}</span>`;
-        
-        ui.debugger.appendChild(entry);
-        ui.debugger.scrollTop = ui.debugger.scrollHeight; // Auto-Scroll
-        console.log(`[${type.toUpperCase()}]`, msg);
-    }
-
-    // --- Helper: DataView zu Hex String ---
-    function dataToHex(dataView) {
-        let hex = [];
-        for (let i = 0; i < dataView.byteLength; i++) {
-            hex.push('0x' + dataView.getUint8(i).toString(16).padStart(2, '0').toUpperCase());
-        }
-        return hex.join(' ');
-    }
-
-    // --- Core Bluetooth Logic ---
-
-    async function startScan() {
-        try {
-            log("Starte Scan...", "info");
-            // ACHTUNG: acceptAllDevices: true erlaubt Verbindung, aber Zugriff auf Services ist eingeschränkt 
-            // ohne 'optionalServices'. Da wir "Universal" sind, fügen wir hier gängige Services hinzu.
-            // Für proprietäre Geräte musst du hier ggf. die UUID manuell ergänzen!
-            const options = {
-                acceptAllDevices: true,
-                optionalServices: [
-                    "battery_service", "device_information", "health_thermometer", "heart_rate",
-                    // Füge hier bekannte proprietäre UUIDs hinzu, falls nötig
-                ]
-            };
-
-            currentDevice = await navigator.bluetooth.requestDevice(options);
-            
-            ui.deviceInfo.innerText = `Verbunden mit: ${currentDevice.name || 'Unnamed Device'} (${currentDevice.id})`;
-            log(`Gerät gewählt: ${currentDevice.name}`, "success");
-
-            currentDevice.addEventListener('gattserverdisconnected', onDisconnected);
-
-            log("Verbinde mit GATT Server...", "info");
-            currentServer = await currentDevice.gatt.connect();
-            log("GATT verbunden!", "success");
-            
-            ui.btnScan.disabled = true;
-            ui.btnDisconnect.disabled = false;
-
-            discoverServices();
-
-        } catch (error) {
-            log(`Scan Fehler: ${error}`, "error");
-        }
-    }
-
-    async function discoverServices() {
-        ui.servicesContainer.innerHTML = '';
-        log("Suche Services...", "info");
-
-        try {
-            const services = await currentServer.getPrimaryServices();
-            log(`${services.length} Services gefunden.`, "info");
-
-            for (const service of services) {
-                const serviceDiv = document.createElement('div');
-                serviceDiv.className = 'service-block';
-                serviceDiv.innerHTML = `<div class="service-uuid">Service: ${getServiceName(service.uuid)}</div>`;
-                
-                ui.servicesContainer.appendChild(serviceDiv);
-
-                // Characteristics laden
-                try {
-                    const characteristics = await service.getCharacteristics();
-                    for (const char of characteristics) {
-                        renderCharacteristic(serviceDiv, char);
-                    }
-                } catch (err) {
-                    log(`Konnte Chars für ${service.uuid} nicht laden: ${err}`, "warn");
-                }
-            }
-        } catch (error) {
-            log(`Service Discovery Fehler: ${error}`, "error");
-        }
-    }
-
-    function renderCharacteristic(container, char) {
-        const props = [];
-        if (char.properties.read) props.push("READ");
-        if (char.properties.write) props.push("WRITE");
-        if (char.properties.writeWithoutResponse) props.push("WRITE NO RESP");
-        if (char.properties.notify) props.push("NOTIFY");
-
+        const ts = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}.${String(now.getMilliseconds()).padStart(3,'0')}`;
         const div = document.createElement('div');
-        div.className = 'char-block';
+        div.className = 'log-line';
+        div.innerHTML = `<span class="ts">${ts}</span><span class="l-${type}">${msg}</span>`;
+        ui.term.appendChild(div);
+        ui.term.scrollTop = ui.term.scrollHeight;
+    }
+
+    // --- PLOTTER ENGINE ---
+    const ctx = ui.canvas.getContext('2d');
+    function resizeCanvas() {
+        ui.canvas.width = ui.canvas.offsetWidth;
+        ui.canvas.height = ui.canvas.offsetHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function drawScope() {
+        const w = ui.canvas.width;
+        const h = ui.canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.strokeStyle = '#00ff9d';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        const step = w / (plotData.length - 1);
+        
+        // Auto-Scale Basic (optional, hier fest oder dynamisch)
+        let min = Math.min(...plotData);
+        let max = Math.max(...plotData);
+        if (max === min) { max++; min--; } // Prevent div by zero
+
+        for(let i=0; i<plotData.length; i++) {
+            const val = plotData[i];
+            const normalized = (val - min) / (max - min); 
+            const y = h - (normalized * (h - 10)) - 5; // 5px padding
+            if(i===0) ctx.moveTo(0, y);
+            else ctx.lineTo(i * step, y);
+        }
+        ctx.stroke();
+        
+        // Text Info
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px monospace';
+        ctx.fillText(`Max: ${max.toFixed(1)}`, 5, 10);
+        ctx.fillText(`Min: ${min.toFixed(1)}`, 5, h-2);
+        
+        requestAnimationFrame(drawScope);
+    }
+    requestAnimationFrame(drawScope); // Start Loop
+
+    document.getElementById('btnClearPlot').onclick = () => {
+        plotData = new Array(300).fill(0);
+    };
+
+    // --- PARSER ENGINE ---
+    function runUserParser(dataView) {
+        const code = ui.parser.value;
+        try {
+            // Erstelle Funktion aus String. Sicherer als direct eval.
+            const func = new Function('data', code);
+            return func(dataView);
+        } catch (e) {
+            return `ERR: ${e.message}`; // Fehler im Log anzeigen, nicht crashen
+        }
+    }
+
+    // --- BLUETOOTH CORE ---
+    ui.scan.onclick = async () => {
+        try {
+            device = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: ["battery_service", "device_information", "health_thermometer", "heart_rate"] // Ergänze proprietäre UUIDs hier wenn bekannt
+            });
+            
+            device.addEventListener('gattserverdisconnected', onDisc);
+            ui.status.innerText = "Connecting...";
+            server = await device.gatt.connect();
+            ui.status.innerText = "Connected";
+            ui.scan.disabled = true;
+            ui.disc.disabled = false;
+            log(`Connected to ${device.name}`, 'info');
+            
+            discover();
+        } catch (e) { log(e, 'err'); }
+    };
+
+    ui.disc.onclick = () => { if(device) device.gatt.disconnect(); };
+
+    function onDisc() {
+        ui.status.innerText = "Disconnected";
+        ui.list.innerHTML = "Waiting...";
+        ui.scan.disabled = false;
+        ui.disc.disabled = true;
+        log("Disconnected", 'warn');
+    }
+
+    async function discover() {
+        ui.list.innerHTML = 'Scanning Services...';
+        const services = await server.getPrimaryServices();
+        ui.list.innerHTML = '';
+        
+        for(const s of services) {
+            const sDiv = document.createElement('div');
+            sDiv.innerHTML = `<div class="service-uuid">${uuidToName(s.uuid)}</div>`;
+            ui.list.appendChild(sDiv);
+            
+            try {
+                const chars = await s.getCharacteristics();
+                for(const c of chars) renderChar(sDiv, c);
+            } catch(e) { log(`Error reading Service ${s.uuid}`, 'err'); }
+        }
+    }
+
+    function renderChar(parent, c) {
+        const div = document.createElement('div');
+        div.className = 'char-item';
+        const id = `val-${c.uuid.substring(0,8)}`; // simple ID
+        
+        let actions = '';
+        if(c.properties.read) actions += `<button class="btn-sm b-read">READ</button>`;
+        if(c.properties.notify) actions += `<button class="btn-sm b-sub">SUB</button>`;
+        if(c.properties.write || c.properties.writeWithoutResponse) actions += `<button class="btn-sm b-write">WRITE</button>`;
+
         div.innerHTML = `
-            <span class="char-uuid">${getServiceName(char.uuid)}</span>
-            <div class="char-props">[${props.join(', ')}]</div>
-            <div class="actions">
-                ${char.properties.read ? `<button class="btn-read">READ</button>` : ''}
-                ${char.properties.notify ? `<button class="btn-notify">SUBSCRIBE</button>` : ''}
-                ${(char.properties.write || char.properties.writeWithoutResponse) ? `<button class="btn-write">WRITE</button>` : ''}
-            </div>
-            <div class="value-display">--</div>
+            <div class="char-uuid">${uuidToName(c.uuid)}</div>
+            <div class="val-display" id="${id}">-</div>
+            <div class="btn-group">${actions}</div>
         `;
 
-        // Event Listeners
-        if (char.properties.read) {
-            div.querySelector('.btn-read').onclick = async () => {
+        // Handlers
+        if(c.properties.read) {
+            div.querySelector('.b-read').onclick = async () => {
                 try {
-                    log(`Lese ${char.uuid}...`, "info");
-                    const value = await char.readValue();
-                    const hex = dataToHex(value);
-                    div.querySelector('.value-display').style.display = 'block';
-                    div.querySelector('.value-display').innerText = hex;
-                    log(`READ OK: ${hex}`, "data");
-                } catch (e) { log(`Read Fehler: ${e}`, "error"); }
+                    const v = await c.readValue();
+                    processData(c, v, div.querySelector('.val-display'));
+                } catch(e) { log(e, 'err'); }
             };
         }
 
-        if (char.properties.notify) {
-            div.querySelector('.btn-notify').onclick = async (e) => {
+        if(c.properties.write || c.properties.writeWithoutResponse) {
+            div.querySelector('.b-write').onclick = async () => {
+                const hex = prompt("Hex Bytes (z.B. 01 FF A0):", "");
+                if(!hex) return;
                 try {
-                    if (!char._isNotifying) {
-                        await char.startNotifications();
-                        char.addEventListener('characteristicvaluechanged', handleNotification);
-                        char._isNotifying = true;
-                        e.target.innerText = "STOP SUBS";
-                        e.target.style.background = "#cf6679";
-                        log(`Notify gestartet für ${char.uuid}`, "success");
-                    } else {
-                        await char.stopNotifications();
-                        char.removeEventListener('characteristicvaluechanged', handleNotification);
-                        char._isNotifying = false;
-                        e.target.innerText = "SUBSCRIBE";
-                        e.target.style.background = "#333";
-                        log(`Notify gestoppt für ${char.uuid}`, "info");
-                    }
-                } catch (e) { log(`Notify Fehler: ${e}`, "error"); }
+                    const bytes = hex.match(/[0-9A-Fa-f]{2}/g).map(h => parseInt(h, 16));
+                    const buf = new Uint8Array(bytes);
+                    await c.writeValue(buf);
+                    log(`OUT: ${hex}`, 'out');
+                } catch(e) { log(e, 'err'); }
             };
         }
 
-        if (char.properties.write || char.properties.writeWithoutResponse) {
-            div.querySelector('.btn-write').onclick = () => {
-                const val = prompt("Hex Wert eingeben (z.B. 01 FF 0A):");
-                if (val) sendHex(char, val);
+        if(c.properties.notify) {
+            const btn = div.querySelector('.b-sub');
+            btn.onclick = async () => {
+                if(!c._notifying) {
+                    await c.startNotifications();
+                    c.addEventListener('characteristicvaluechanged', (e) => {
+                        processData(c, e.target.value, div.querySelector('.val-display'));
+                    });
+                    c._notifying = true;
+                    activeCharForPlot = c.uuid; // Diese Char füttert jetzt den Graph
+                    btn.innerText = "STOP";
+                    btn.style.borderColor = "#ff0055";
+                    log(`Subscribed ${c.uuid}`, 'info');
+                } else {
+                    // Simplification: Stop logic removed for brevity in "Hardcore" mode, just reload to stop or add logic back
+                    log("Stop not impl in micro version", 'warn');
+                }
             };
         }
 
-        container.appendChild(div);
+        parent.appendChild(div);
     }
 
-    function handleNotification(event) {
-        const value = event.target.value;
-        const hex = dataToHex(value);
-        log(`NOTIFY [${getServiceName(event.target.uuid)}]: ${hex}`, "data");
-        // Update UI if visible
-        // Hier könnte man das UI Element suchen und updaten
-    }
+    function processData(char, dataView, uiElem) {
+        // 1. Hex String bauen für UI
+        let hex = [];
+        for(let i=0; i<dataView.byteLength; i++) hex.push(dataView.getUint8(i).toString(16).padStart(2,'0').toUpperCase());
+        const hexStr = hex.join(' ');
+        
+        // 2. User Parser ausführen
+        const parsedVal = runUserParser(dataView);
+        
+        // 3. Update UI Text
+        uiElem.innerText = `${hexStr} \n-> ${parsedVal}`;
+        
+        // 4. Loggen
+        log(`IN [${char.uuid.substring(0,4)}..]: ${hexStr} = ${parsedVal}`, 'in');
 
-    async function sendHex(char, hexStr) {
-        try {
-            // Säubere den String
-            const cleanStr = hexStr.replace(/\s+/g, '').replace(/0x/g, '');
-            if (cleanStr.length % 2 !== 0) throw new Error("Ungültige Hex Länge");
-            
-            const byteArray = new Uint8Array(cleanStr.length / 2);
-            for (let i = 0; i < cleanStr.length; i += 2) {
-                byteArray[i / 2] = parseInt(cleanStr.substring(i, i + 2), 16);
-            }
-
-            log(`Sende: ${dataToHex(new DataView(byteArray.buffer))} an ${char.uuid}`, "info");
-            await char.writeValue(byteArray);
-            log("Write erfolgreich!", "success");
-        } catch (e) {
-            log(`Write Fehler: ${e.message}`, "error");
+        // 5. Plotten (nur wenn Zahl)
+        if (typeof parsedVal === 'number' && !isNaN(parsedVal)) {
+            plotData.push(parsedVal);
+            plotData.shift(); // Ringbuffer
         }
     }
 
-    function onDisconnected() {
-        log("Gerät getrennt!", "warn");
-        ui.btnScan.disabled = false;
-        ui.btnDisconnect.disabled = true;
-        ui.deviceInfo.innerText = "Kein Gerät verbunden.";
-        ui.servicesContainer.innerHTML = '';
-        currentDevice = null;
-        currentServer = null;
+    function uuidToName(u) {
+        if(u.startsWith('000018')) return 'SVC:' + u.substring(4,8);
+        if(u.startsWith('00002a')) return 'CHR:' + u.substring(4,8);
+        return '...' + u.substring(4,8);
     }
-
-    // Utility: UUID Shortener / Namer
-    function getServiceName(uuid) {
-        if (uuid.startsWith("0000180f")) return "Battery Service";
-        if (uuid.startsWith("0000180a")) return "Device Info";
-        if (uuid.startsWith("0000")) return "0x" + uuid.substring(4, 8).toUpperCase(); 
-        return uuid;
-    }
-
-    ui.btnScan.addEventListener('click', startScan);
-    ui.btnDisconnect.addEventListener('click', () => {
-        if (currentDevice && currentDevice.gatt.connected) {
-            currentDevice.gatt.disconnect();
-        }
-    });
 
 </script>
 </body>
 </html>
+ 
